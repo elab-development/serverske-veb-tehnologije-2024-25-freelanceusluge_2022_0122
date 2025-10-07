@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\SkillController;
 
 Route::prefix('auth')->group(function () {
@@ -31,4 +32,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Provider (ili admin) vezuje/odvezuje skill za profil
     Route::post('/skills/{skill}/attach', [SkillController::class, 'attachToProfile'])->middleware('role:provider,client');
     Route::delete('/skills/{skill}/detach', [SkillController::class, 'detachFromProfile'])->middleware('role:provider,client');
+});
+
+// Public list/show  
+Route::get('/projects', [ProjectController::class, 'index']);
+Route::get('/projects/{project}', [ProjectController::class, 'show']);
+
+// Za izmene – samo prijavljeni klijenti
+Route::middleware(['auth:sanctum','role:client'])->group(function () {
+    Route::post('/projects', [ProjectController::class, 'store']);
+    Route::match(['put','patch'], '/projects/{project}', [ProjectController::class, 'update']);
+    Route::delete('/projects/{project}', [ProjectController::class, 'destroy']);
 });
