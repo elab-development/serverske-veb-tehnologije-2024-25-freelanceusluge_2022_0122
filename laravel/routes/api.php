@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BidController;
@@ -8,60 +7,93 @@ use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\SkillController;
 use App\Http\Controllers\EngagementController;
 
-Route::get('/engagements',               [EngagementController::class, 'index']);
-Route::get('/engagements/{engagement}',  [EngagementController::class, 'show']);
-Route::post('/engagements',              [EngagementController::class, 'store']);
-Route::match(['put','patch'], '/engagements/{engagement}', [EngagementController::class, 'update']);
-Route::delete('/engagements/{engagement}', [EngagementController::class, 'destroy']);
-
-// opciono state tranzicije:
-Route::post('/engagements/{engagement}/complete', [EngagementController::class, 'complete']);
-Route::post('/engagements/{engagement}/cancel',   [EngagementController::class, 'cancel']);
+/**
+ * AUTH
+ */
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login',    [AuthController::class, 'login']);
 
     Route::middleware('auth:sanctum')->group(function () {
-        Route::get('me',    [AuthController::class, 'me']);
-        Route::post('logout',[AuthController::class, 'logout']);
+        Route::get('me',      [AuthController::class, 'me']);
+        Route::post('logout', [AuthController::class, 'logout']);
     });
 });
 
 
-// javno pretraživanje/listanje skilova (po želji ostavi public)
-Route::get('/skills',            [SkillController::class, 'index']);
-Route::get('/skills/{skill}',    [SkillController::class, 'show']);
+/**
+ * PUBLIC (bez prijave)
+ * - projekti: list/show
+ * - skilovi: list/show (+ profili po skillu)
+ * - bidovi: list/show
+ */
+Route::get('/projects',                [ProjectController::class, 'index']);
+Route::get('/projects/{project}',      [ProjectController::class, 'show']);
+
+Route::get('/skills',                  [SkillController::class, 'index']);
+Route::get('/skills/{skill}',          [SkillController::class, 'show']);
 Route::get('/skills/{skill}/profiles', [SkillController::class, 'profilesBySkill']);
 
-// akcije koje menjaju podatke – zaštiti ih
-Route::middleware(['auth:sanctum'])->group(function () {
-    // Ako želiš samo adminu/klijentu da menja listu skilova u katalogu, stavi npr. 'role:client'
-    Route::post('/skills',            [SkillController::class, 'store'])->middleware('role:client,provider');
-    Route::match(['put','patch'], '/skills/{skill}', [SkillController::class, 'update'])->middleware('role:client,provider');
-    Route::delete('/skills/{skill}',  [SkillController::class, 'destroy'])->middleware('role:client');
+Route::get('/bids',                    [BidController::class, 'index']);
+Route::get('/bids/{bid}',              [BidController::class, 'show']);
 
-    // Provider (ili admin) vezuje/odvezuje skill za profil
-    Route::post('/skills/{skill}/attach', [SkillController::class, 'attachToProfile'])->middleware('role:provider,client');
-    Route::delete('/skills/{skill}/detach', [SkillController::class, 'detachFromProfile'])->middleware('role:provider,client');
-});
 
-// Public list/show  
-Route::get('/projects', [ProjectController::class, 'index']);
-Route::get('/projects/{project}', [ProjectController::class, 'show']);
-
-// Za izmene – samo prijavljeni klijenti
+/**
+ * CLIENT zone (mora auth + role:client)
+ * - kreiranje/izmena/brisanje projekata
+ * - prihvatanje ponude
+ * - opcionalno: menjanje stanja engagement-a (complete/cancel)
+ */
 Route::middleware(['auth:sanctum','role:client'])->group(function () {
-    Route::post('/projects', [ProjectController::class, 'store']);
-    Route::match(['put','patch'], '/projects/{project}', [ProjectController::class, 'update']);
-    Route::delete('/projects/{project}', [ProjectController::class, 'destroy']);
+    Route::post('/projects',                                   [ProjectController::class, 'store']);
+    Route::match(['put','patch'], '/projects/{project}',       [ProjectController::class, 'update']);
+    Route::delete('/projects/{project}',                       [ProjectController::class, 'destroy']);
+
+    Route::post('/bids/{bid}/accept',                          [BidController::class, 'accept']);
+
+    // (opciono) client može zatvoriti / otkazati angažman
+    Route::post('/engagements/{engagement}/complete',          [EngagementController::class, 'complete']);
+    Route::post('/engagements/{engagement}/cancel',            [EngagementController::class, 'cancel']);
 });
 
-Route::get('/bids', [BidController::class, 'index']);
-Route::get('/bids/{bid}', [BidController::class, 'show']);
 
-Route::post('/projects/{project}/bids', [BidController::class, 'store']);
-Route::patch('/bids/{bid}',            [BidController::class, 'update']);
-Route::delete('/bids/{bid}',           [BidController::class, 'destroy']);
+/**
+ * PROVIDER zone (mora auth + role:provider)
+ * - dodavanje/izmena/brisanje svojih bidova
+ * - povlačenje bida
+ * - attach/detach skill za profil 
+ */
+Route::middleware(['auth:sanctum','role:provider'])->group(function () {
+    Route::post('/projects/{project}/bids', [BidController::class, 'store']);
+    Route::patch('/bids/{bid}',            [BidController::class, 'update']);
+    Route::delete('/bids/{bid}',           [BidController::class, 'destroy']);
+    Route::post('/bids/{bid}/withdraw',    [BidController::class, 'withdraw']);
 
-Route::post('/bids/{bid}/withdraw',    [BidController::class, 'withdraw']);
-Route::post('/bids/{bid}/accept',      [BidController::class, 'accept']);
+    Route::post('/skills/{skill}/attach',  [SkillController::class, 'attachToProfile']);
+    Route::delete('/skills/{skill}/detach',[SkillController::class, 'detachFromProfile']);
+});
+
+
+/**
+ * UREĐIVANJE KATALOGA SKILOVA (primer: dozvoli i clientu i provideru)
+ */
+Route::middleware(['auth:sanctum','role:client,provider'])->group(function () {
+    Route::post('/skills',                         [SkillController::class, 'store']);
+    Route::match(['put','patch'], '/skills/{skill}', [SkillController::class, 'update']);
+});
+
+// Brisanje skill-a — npr. samo client (ili “admin” ako ga dodaš)
+Route::middleware(['auth:sanctum','role:client'])->delete('/skills/{skill}', [SkillController::class, 'destroy']);
+
+
+/**
+ * ENGAGEMENTS kao API RESOURCE (zahtevano)
+ * - Javne su index/show 
+ * - Create/update/destroy zaštiti po potrebi  
+ */
+Route::apiResource('engagements', EngagementController::class)->only(['index','show']);
+
+// Ako želiš CRUD pod zaštitom (primer: i client i provider mogu kreirati/menjati)
+Route::middleware(['auth:sanctum','role:client,provider'])->group(function () {
+    Route::apiResource('engagements', EngagementController::class)->only(['store','update','destroy']);
+});

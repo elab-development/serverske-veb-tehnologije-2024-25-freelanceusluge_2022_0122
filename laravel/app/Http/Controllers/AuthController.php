@@ -9,13 +9,18 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rules\File;
 
 class AuthController extends Controller
 {
     /**
      * POST /api/auth/register
-     * body: name, email, password, password_confirmation, role (client|provider)
-     * opcioni profil: headline, bio, github_url, portfolio_url
+     * body (multipart/form-data):
+     *  - name, email, password, password_confirmation, role (client|provider)
+     *  - optional profile: headline, bio, github_url, portfolio_url
+     *  - optional files: avatar (image), banner (image)
      */
     public function register(Request $request)
     {
@@ -25,14 +30,47 @@ class AuthController extends Controller
             'password'              => ['required','string','min:8','confirmed'],
             'role'                  => ['required','in:client,provider'],
 
-            // opcioni profil podaci:
+            // profil
             'headline'              => ['nullable','string','max:120'],
             'bio'                   => ['nullable','string'],
             'github_url'            => ['nullable','url','max:255'],
             'portfolio_url'         => ['nullable','url','max:255'],
+
+            // fajlovi
+            'avatar'                => ['nullable', File::image()->types(['jpg','jpeg','png','webp'])->max(5 * 1024)], // 5MB
+            'banner'                => ['nullable', File::image()->types(['jpg','jpeg','png','webp'])->max(8 * 1024)], // 8MB
         ]);
 
-        $user = DB::transaction(function () use ($data) {
+        // --- HIBP (Have I Been Pwned) provera lozinke preko range API-ja (bez ključa) ---
+        try {
+            $sha1   = strtoupper(sha1($data['password']));
+            $prefix = substr($sha1, 0, 5);
+            $suffix = substr($sha1, 5);
+
+            $resp = Http::withHeaders(['User-Agent' => 'FreelanceApp/1.0'])
+                ->timeout(5)
+                ->get("https://api.pwnedpasswords.com/range/{$prefix}");
+
+            if ($resp->ok()) {
+                $pwned = collect(explode("\n", trim($resp->body())))
+                    ->some(function ($line) use ($suffix) {
+                        [$sfx, $count] = array_pad(explode(':', trim($line)), 2, 0);
+                        return strtoupper($sfx) === $suffix && (int)$count > 0;
+                    });
+
+                if ($pwned) {
+                    return response()->json([
+                        'message'  => 'Password je kompromitovan u poznatim curenjima podataka. Izaberi drugi.',
+                        // klijent može sam da predloži novi; namerno ne nudimo nasumičan ovde
+                    ], 422);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ako API ne radi/timeout — ne blokiramo registraciju.
+        }
+
+        // --- Kreiranje user + profil (sa uploadom i UI Avatars fallback-om) ---
+        $user = DB::transaction(function () use ($data, $request) {
             $user = User::create([
                 'name'     => $data['name'],
                 'email'    => $data['email'],
@@ -40,12 +78,45 @@ class AuthController extends Controller
                 'role'     => $data['role'],
             ]);
 
+            // upload fajlova (ako postoje)
+            $avatarPath = null;
+            $bannerPath = null;
+
+            if ($request->hasFile('avatar')) {
+                $avatarPath = $request->file('avatar')->store("profiles/{$user->id}", 'public');
+            }
+            if ($request->hasFile('banner')) {
+                $bannerPath = $request->file('banner')->store("profiles/{$user->id}", 'public');
+            }
+
+            // UI Avatars fallback (ako avatar nije poslat)
+            if (!$avatarPath) {
+                try {
+                    $uiUrl = 'https://ui-avatars.com/api/?'.http_build_query([
+                        'name'       => $user->name,
+                        'background' => 'random',
+                        'bold'       => 'true',
+                        'format'     => 'png',
+                        'size'       => 256,
+                    ]);
+                    $img = Http::timeout(5)->get($uiUrl);
+                    if ($img->ok()) {
+                        $avatarPath = "profiles/{$user->id}/avatar.png";
+                        Storage::disk('public')->put($avatarPath, $img->body());
+                    }
+                } catch (\Throwable $e) {
+                    // tišina — registracija ide dalje i bez avatara
+                }
+            }
+
             Profile::create([
                 'user_id'       => $user->id,
                 'headline'      => $data['headline'] ?? null,
                 'bio'           => $data['bio'] ?? null,
                 'github_url'    => $data['github_url'] ?? null,
                 'portfolio_url' => $data['portfolio_url'] ?? null,
+                'avatar_path'   => $avatarPath,
+                'banner_path'   => $bannerPath,
             ]);
 
             return $user->load('profile');
@@ -62,7 +133,6 @@ class AuthController extends Controller
 
     /**
      * POST /api/auth/login
-     * body: email, password
      */
     public function login(Request $request)
     {
@@ -76,7 +146,7 @@ class AuthController extends Controller
         }
 
         /** @var \App\Models\User $user */
-        $user = $request->user()->load('profile');
+        $user  = $request->user()->load('profile');
         $token = $user->createToken('auth')->plainTextToken;
 
         return response()->json([
