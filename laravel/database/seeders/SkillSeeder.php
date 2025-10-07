@@ -24,7 +24,6 @@ class SkillSeeder extends Seeder
             Skill::firstOrCreate(['name' => $s['name']], ['category' => $s['category']]);
         }
 
-        // I još malo random-a preko factory-ja
-        \App\Models\Skill::factory()->count(3)->create();
+        
     }
 }

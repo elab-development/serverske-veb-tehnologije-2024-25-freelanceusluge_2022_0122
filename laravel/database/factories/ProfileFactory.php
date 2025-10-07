@@ -26,15 +26,7 @@ class ProfileFactory extends Factory
             ],
         ];
     }
-    //poziva se uvek kada pozivamo faktori sa create
-    public function configure()
-    {
-        return $this->afterCreating(function (\App\Models\Profile $profile) {
-            // napravi par skillova ili uzmi postojeće
-            $skills = \App\Models\Skill::factory()->count(rand(2,4))->create();
-            $profile->skills()->sync($skills->pluck('id')->all());
-        });
-    }
+ 
 
 
 }

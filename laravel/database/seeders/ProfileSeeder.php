@@ -10,8 +10,9 @@ class ProfileSeeder extends Seeder
 {
     public function run(): void
     {
-        // Profili za sve provajdere koji ih nemaju
+        // Profili za sve providere koji ih nemaju
         $providers = User::where('role', 'provider')->get();
+
         foreach ($providers as $user) {
             if (!$user->profile) {
                 Profile::factory()->create([
@@ -20,7 +21,7 @@ class ProfileSeeder extends Seeder
             }
         }
 
-        // Dodatno par profila ( za test)
+        // Još 2 test profila (bez skillova)
         Profile::factory()->count(2)->create();
     }
 }

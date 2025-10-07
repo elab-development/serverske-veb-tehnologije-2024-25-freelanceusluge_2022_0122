@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Storage; // za url()
 
 class Profile extends Model
 {
+    use HasFactory;
     protected $fillable = [
         'user_id',
         'headline',
@@ -19,7 +21,9 @@ class Profile extends Model
     ];
 
     protected $appends = ['avatar_url', 'banner_url']; // auto se dodaju u JSON
-
+    protected $casts = [
+        'links' => 'array',                    // ← bitno za JSON encode/decode
+    ];
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
