@@ -3,9 +3,20 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BidController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\SkillController;
+use App\Http\Controllers\EngagementController;
 
+Route::get('/engagements',               [EngagementController::class, 'index']);
+Route::get('/engagements/{engagement}',  [EngagementController::class, 'show']);
+Route::post('/engagements',              [EngagementController::class, 'store']);
+Route::match(['put','patch'], '/engagements/{engagement}', [EngagementController::class, 'update']);
+Route::delete('/engagements/{engagement}', [EngagementController::class, 'destroy']);
+
+// opciono state tranzicije:
+Route::post('/engagements/{engagement}/complete', [EngagementController::class, 'complete']);
+Route::post('/engagements/{engagement}/cancel',   [EngagementController::class, 'cancel']);
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login',    [AuthController::class, 'login']);
@@ -44,3 +55,13 @@ Route::middleware(['auth:sanctum','role:client'])->group(function () {
     Route::match(['put','patch'], '/projects/{project}', [ProjectController::class, 'update']);
     Route::delete('/projects/{project}', [ProjectController::class, 'destroy']);
 });
+
+Route::get('/bids', [BidController::class, 'index']);
+Route::get('/bids/{bid}', [BidController::class, 'show']);
+
+Route::post('/projects/{project}/bids', [BidController::class, 'store']);
+Route::patch('/bids/{bid}',            [BidController::class, 'update']);
+Route::delete('/bids/{bid}',           [BidController::class, 'destroy']);
+
+Route::post('/bids/{bid}/withdraw',    [BidController::class, 'withdraw']);
+Route::post('/bids/{bid}/accept',      [BidController::class, 'accept']);

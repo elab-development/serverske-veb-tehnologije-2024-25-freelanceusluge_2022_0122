@@ -16,25 +16,22 @@ class ProjectController extends Controller
             ->with(['client.profile'])
             ->when($request->filled('status'), fn ($qr) => $qr->where('status', $request->string('status')))
             ->when($request->filled('client_id'), fn ($qr) => $qr->where('client_id', $request->integer('client_id')))
-            ->when($request->boolean('mine'), fn ($qr) => $qr->where('client_id', $request->user()?->id))
+            ->when($request->boolean('mine') && $request->user(), fn ($qr) => $qr->where('client_id', $request->user()->id))
             ->when($request->filled('q'), fn ($qr) => $qr->where('title', 'like', '%'.$request->string('q').'%'))
             ->when($request->filled('min_budget'), fn ($qr) => $qr->where('budget_min', '>=', (float)$request->input('min_budget')))
             ->when($request->filled('max_budget'), fn ($qr) => $qr->where('budget_max', '<=', (float)$request->input('max_budget')))
-            ->when($request->filled('tag'), function ($qr) use ($request) {
-                // tags je JSON array; MySQL -> whereJsonContains, SQLite -> fallback
-                return $qr->whereJsonContains('tags', $request->string('tag'));
-            })
+            ->when($request->filled('tag'), fn ($qr) => $qr->whereJsonContains('tags', $request->string('tag')))
             ->orderByDesc('id');
 
         return ProjectResource::collection($q->paginate(12));
     }
 
-    // POST /api/projects (client)
+    // POST /api/projects
     public function store(Request $request)
     {
-        $this->authorizeClient($request);
-
         $data = $request->validate([
+            // ako ima auth, client_id ignorisemo; ako nema auth, mora u body-ju
+            'client_id'   => [$request->user() ? 'nullable' : 'required','integer','exists:users,id'],
             'title'       => ['required','string','max:160'],
             'description' => ['nullable','string'],
             'budget_min'  => ['nullable','numeric','gte:0'],
@@ -43,12 +40,11 @@ class ProjectController extends Controller
             'tags'        => ['nullable'], // array ili csv; normalize ispod
         ]);
 
-        $data['client_id'] = $request->user()->id;
+        $data['client_id'] = $request->user()->id ?? $data['client_id'];
         $data['status']    = $data['status'] ?? 'open';
         $data['tags']      = $this->normalizeTags($data['tags'] ?? null);
 
         $project = Project::create($data)->load('client.profile');
-
         return new ProjectResource($project);
     }
 
@@ -59,12 +55,12 @@ class ProjectController extends Controller
         return new ProjectResource($project);
     }
 
-    // PUT/PATCH /api/projects/{project} (client vlasnik)
+    // PUT/PATCH /api/projects/{project}
     public function update(Request $request, Project $project)
     {
-        $this->authorizeOwner($request, $project);
-
+        // Bez provera vlasništva — dozvoljava svima koji pozovu endpoint
         $data = $request->validate([
+            'client_id'   => ['sometimes','integer','exists:users,id'],
             'title'       => ['sometimes','string','max:160'],
             'description' => ['sometimes','nullable','string'],
             'budget_min'  => ['sometimes','nullable','numeric','gte:0'],
@@ -81,15 +77,21 @@ class ProjectController extends Controller
         return new ProjectResource($project->fresh('client.profile'));
     }
 
-    // DELETE /api/projects/{project} (client vlasnik)
+    // DELETE /api/projects/{project}
     public function destroy(Request $request, Project $project)
     {
-        $this->authorizeOwner($request, $project);
+        // Bez provera vlasništva
         $project->delete();
-
         return response()->json(['message' => 'Project deleted']);
     }
 
- 
-   
+    /** Prihvata array ili CSV string i vraća array | null */
+    private function normalizeTags($tags)
+    {
+        if (is_null($tags) || $tags === '') return null;
+        if (is_array($tags)) return array_values(array_unique(array_map('strval', $tags)));
+        $parts = array_map('trim', explode(',', (string)$tags));
+        $parts = array_filter($parts, fn($v) => $v !== '');
+        return $parts ? array_values(array_unique($parts)) : null;
+    }
 }
