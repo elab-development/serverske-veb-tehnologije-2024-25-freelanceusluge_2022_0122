@@ -21,10 +21,10 @@ return new class extends Migration
             $table->foreignId('provider_id')->constrained('users')->cascadeOnDelete();
 
  
-            $table->decimal('amount', 10, 2)->nullable(false);
+            
 
           
-            $table->decimal('ammount', 10, 2)->nullable()->comment('TYPO: namerno pogrešno polje, ukloniti u sledećoj migraciji');
+            $table->decimal('ammount', 10, 2)->nullable();
 
             $table->text('message')->nullable();
             $table->string('status', 20)->default('pending')->index(); 
