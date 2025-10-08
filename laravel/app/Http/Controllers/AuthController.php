@@ -24,22 +24,20 @@ class AuthController extends Controller
      */
     public function register(Request $request)
     {
-        $data = $request->validate([
-            'name'                  => ['required','string','min:2','max:100'],
-            'email'                 => ['required','email:rfc,dns','max:255','unique:users,email'],
-            'password'              => ['required','string','min:8','confirmed'],
-            'role'                  => ['required','in:client,provider'],
-
-            // profil
-            'headline'              => ['nullable','string','max:120'],
-            'bio'                   => ['nullable','string'],
-            'github_url'            => ['nullable','url','max:255'],
-            'portfolio_url'         => ['nullable','url','max:255'],
-
-            // fajlovi
-            'avatar'                => ['nullable', File::image()->types(['jpg','jpeg','png','webp'])->max(5 * 1024)], // 5MB
-            'banner'                => ['nullable', File::image()->types(['jpg','jpeg','png','webp'])->max(8 * 1024)], // 8MB
-        ]);
+        $request->headers->set('Accept', 'application/json');
+    
+    $data = $request->validate([
+        'name' => ['required','string','min:2','max:100'],
+        'email' => ['required','email:rfc,dns','max:255','unique:users,email'],
+        'password' => ['required','string','min:8','confirmed'],
+        'role' => ['required','in:client,provider'],
+        'headline' => ['nullable','string','max:120'],
+        'bio' => ['nullable','string'],
+        'github_url' => ['nullable','url','max:255'],
+        'portfolio_url' => ['nullable','url','max:255'],
+        'avatar' => ['nullable', \Illuminate\Validation\Rules\File::image()->types(['jpg','jpeg','png','webp'])->max(5 * 1024)],
+        'banner' => ['nullable', \Illuminate\Validation\Rules\File::image()->types(['jpg','jpeg','png','webp'])->max(8 * 1024)],
+    ]);
 
         // --- HIBP (Have I Been Pwned) provera lozinke preko range API-ja (bez ključa) ---
         try {

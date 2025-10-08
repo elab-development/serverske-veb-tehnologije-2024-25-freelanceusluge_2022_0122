@@ -18,11 +18,7 @@ return new class extends Migration
 
  
             $table->foreignId('project_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('provider_id')->constrained('users')->cascadeOnDelete();
-
- 
-            
-
+            $table->foreignId('provider_id')->constrained('users')->cascadeOnDelete(); 
           
             $table->decimal('ammount', 10, 2)->nullable();
 
